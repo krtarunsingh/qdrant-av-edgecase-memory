@@ -1,0 +1,23 @@
+# qdrant-av-edgecase-memory
+
+Multi-modal "edge-case memory" for autonomous vehicles using Qdrant.
+
+We store named vectors per scenario:
+- camera frame embedding (vision)
+- LiDAR sweep embedding (lidar)
+- radar signal embedding (radar)
+- incident / annotation embedding (text)
+
+Then we retrieve similar scenarios using:
+- payload filters (weather, time-of-day, location bucket, etc.)
+- temporal filtering (e.g. last 12 months)
+- weighted score fusion across modalities
+
+> Note: For a "runs everywhere" demo, embeddings are lightweight (no GPU, no CLIP downloads).
+> The code is structured so you can replace `vision_embed()` with CLIP later.
+
+## Quick start
+
+### 1) Run Qdrant
+```bash
+docker compose up -d
