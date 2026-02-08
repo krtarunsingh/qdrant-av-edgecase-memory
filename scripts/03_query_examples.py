@@ -12,11 +12,15 @@ from av_memory.search import search_fused, SearchWeights
 def main() -> None:
     client = get_client()
 
-    # Pick a random scenario id from range used in ingestion
     pick = random.randint(0, 1999)
-    sid = f"scn_{pick:07d}"
+    sid = pick
 
-    pt = client.retrieve(collection_name=SETTINGS.collection, ids=[sid], with_vectors=True, with_payload=True)
+    pt = client.retrieve(
+        collection_name=SETTINGS.collection,
+        ids=[sid],
+        with_vectors=True,
+        with_payload=True,
+    )
     if not pt:
         raise RuntimeError("Could not retrieve example point. Did you ingest data?")
 
@@ -25,11 +29,12 @@ def main() -> None:
     payload = base.payload or {}
 
     print("🔎 Query-by-example scenario:")
-    print(f"   id: {sid}")
+    print(f"   id: {payload.get('sid')} (point_id={sid})")
     print(f"   label: {payload.get('label')}")
     print(f"   weather: {payload.get('weather')}, time: {payload.get('time_of_day')}, road: {payload.get('road_type')}")
     print(f"   notes: {payload.get('notes')}")
     print("")
+
 
     now = int(time.time())
     last_12_months = 60 * 60 * 24 * 365
