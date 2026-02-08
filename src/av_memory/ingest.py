@@ -21,7 +21,7 @@ ROAD_TYPES = ["city", "highway", "residential", "intersection"]
 
 @dataclass
 class Scenario:
-    sid: str
+    sid: int
     ts: int
     lat: float
     lon: float
@@ -176,7 +176,7 @@ def make_scenario(i: int, now_ts: int, seed: int) -> Scenario:
     radar = _make_synthetic_radar(label, seed=seed + i * 13)
 
     return Scenario(
-        sid=f"scn_{i:07d}",
+        sid=i,
         ts=ts,
         lat=lat,
         lon=lon,
@@ -200,7 +200,7 @@ def scenario_to_point(s: Scenario) -> qm.PointStruct:
     v_text = text_embed(s.notes)
 
     payload: dict[str, Any] = {
-        "sid": s.sid,
+        "sid": f"scn_{s.sid:07d}",
         "ts": s.ts,
         "lat": s.lat,
         "lon": s.lon,

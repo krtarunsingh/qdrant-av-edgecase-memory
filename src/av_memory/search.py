@@ -61,13 +61,17 @@ def search_modality(
     collection_name: str | None = None,
 ) -> list[qm.ScoredPoint]:
     name = collection_name or SETTINGS.collection
-    return client.search(
+
+    res = client.query_points(
         collection_name=name,
-        query_vector=qm.NamedVector(name=vector_name, vector=query_vector),
+        query=query_vector,          # ✅ correct for 1.16.2
+        using=vector_name,           # ✅ named vector selector
         limit=limit,
         query_filter=filt,
         with_payload=True,
+        with_vectors=False,
     )
+    return list(res.points)
 
 
 def fuse_rankings(
