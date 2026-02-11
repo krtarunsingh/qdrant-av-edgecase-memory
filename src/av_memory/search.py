@@ -25,6 +25,8 @@ def _make_filter(
     ts_min: int | None = None,
     ts_max: int | None = None,
 ) -> qm.Filter | None:
+    # I only build filter clauses for arguments that were explicitly provided.
+    # I do this so I do not accidentally over-constrain search behavior.
     must: list[qm.FieldCondition] = []
 
     if weather is not None:
@@ -62,10 +64,11 @@ def search_modality(
 ) -> list[qm.ScoredPoint]:
     name = collection_name or SETTINGS.collection
 
+    # I query a single named vector space here so each modality can be tuned separately.
     res = client.query_points(
         collection_name=name,
-        query=query_vector,          # ✅ correct for 1.16.2
-        using=vector_name,           # ✅ named vector selector
+        query=query_vector,          # I use the current query arg style from this client version.
+        using=vector_name,           # I explicitly select the named vector modality here.
         limit=limit,
         query_filter=filt,
         with_payload=True,
@@ -80,9 +83,9 @@ def fuse_rankings(
     top_k: int = 20,
 ) -> list[dict[str, Any]]:
     """
-    Weighted score fusion:
-    - Qdrant scores are comparable within a modality, but not always across them.
-    - We'll do a soft normalization per modality based on max score in that list.
+    I use weighted score fusion here.
+    Qdrant scores are strong within a modality, but they are not perfectly calibrated
+    across different modalities, so I normalize each modality before mixing weights.
     """
     wmap = {
         "vision": weights.vision,
@@ -91,7 +94,7 @@ def fuse_rankings(
         "text": weights.text,
     }
 
-    # Collect max scores for normalization
+    # I normalize each modality by its top score before weighted aggregation.
     max_score: dict[str, float] = {}
     for mod, items in lists_by_modality.items():
         ms = 0.0
@@ -107,7 +110,11 @@ def fuse_rankings(
         denom = float(max_score.get(mod, 1.0))
 
         for sp in items:
+            if sp.score is None:
+                continue
+
             sid = str(sp.id)
+            # I use soft normalization so weaker modalities still contribute.
             norm_score = float(sp.score) / denom
 
             if sid not in fused:
@@ -129,7 +136,7 @@ def fuse_rankings(
 def search_fused(
     client: QdrantClient,
     query_vectors: dict[str, list[float]],
-    weights: SearchWeights = SearchWeights(),
+    weights: SearchWeights | None = None,
     limit_per_modality: int = 30,
     top_k: int = 20,
     weather: str | None = None,
@@ -140,6 +147,10 @@ def search_fused(
     ts_max: int | None = None,
     collection_name: str | None = None,
 ) -> list[dict[str, Any]]:
+    if weights is None:
+        weights = SearchWeights()
+
+    # I apply the same payload/time filter to each modality query for consistency.
     filt = _make_filter(
         weather=weather,
         time_of_day=time_of_day,
@@ -151,6 +162,7 @@ def search_fused(
 
     lists_by_modality: dict[str, list[qm.ScoredPoint]] = {}
 
+    # I retrieve candidates per modality first, then fuse into one ranking.
     for mod in ["vision", "lidar", "radar", "text"]:
         qv = query_vectors.get(mod)
         if not qv:
@@ -173,9 +185,10 @@ def is_novel_scene(
     min_results: int = 3,
 ) -> bool:
     """
-    If retrieval can't find a strong match => treat as new scene / edge-case.
-    threshold is empirical; tune per embedder.
+    I treat the scene as novel when retrieval confidence is weak.
+    The threshold is empirical and should be tuned for whichever embedder stack I use.
     """
+    # If I cannot retrieve enough candidates, I mark it novel by default.
     if not fused_results or len(fused_results) < min_results:
         return True
     best = float(fused_results[0]["fused_score"])

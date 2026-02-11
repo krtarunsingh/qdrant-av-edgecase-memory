@@ -5,15 +5,25 @@ from av_memory.schema import get_client
 from av_memory.config import SETTINGS
 from av_memory.search import search_fused, SearchWeights
 
-# We'll "query by example": pick a random stored point, use its vectors as query vectors.
-# This is super practical in real AV stacks too (replay / retrieval), and it's easy to demo.
+# I run a query-by-example flow here: pick one stored point and reuse its vectors as the query.
+# I like this because it mirrors replay/retrieval workflows in practical AV debugging.
 
 
 def main() -> None:
     client = get_client()
 
-    pick = random.randint(0, 1999)
-    sid = pick
+    # I sample from existing point IDs instead of assuming a fixed ingest size.
+    sample = client.scroll(
+        collection_name=SETTINGS.collection,
+        limit=256,
+        with_payload=False,
+        with_vectors=False,
+    )
+    points, _ = sample
+    if not points:
+        raise RuntimeError("Collection is empty. Please ingest data first.")
+
+    sid = random.choice(points).id
 
     pt = client.retrieve(
         collection_name=SETTINGS.collection,
@@ -25,7 +35,7 @@ def main() -> None:
         raise RuntimeError("Could not retrieve example point. Did you ingest data?")
 
     base = pt[0]
-    qvecs = base.vector  # named vectors dict
+    qvecs = base.vector  # I pass all named vectors forward for fused retrieval.
     payload = base.payload or {}
 
     print("🔎 Query-by-example scenario:")
@@ -35,7 +45,7 @@ def main() -> None:
     print(f"   notes: {payload.get('notes')}")
     print("")
 
-
+    # I keep an explicit time window to simulate "recent memory" retrieval.
     now = int(time.time())
     last_12_months = 60 * 60 * 24 * 365
 
@@ -45,7 +55,7 @@ def main() -> None:
         weights=SearchWeights(vision=0.45, lidar=0.30, radar=0.15, text=0.10),
         limit_per_modality=40,
         top_k=12,
-        # Example: filter for same time_of_day, and restrict to last 12 months
+        # I keep time_of_day fixed and limit to recent data for a realistic retrieval slice.
         time_of_day=payload.get("time_of_day"),
         ts_min=now - last_12_months,
         ts_max=now,
