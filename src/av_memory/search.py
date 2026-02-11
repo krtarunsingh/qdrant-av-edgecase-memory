@@ -165,3 +165,18 @@ def search_fused(
         )
 
     return fuse_rankings(lists_by_modality, weights=weights, top_k=top_k)
+
+
+def is_novel_scene(
+    fused_results: list[dict[str, Any]],
+    threshold: float = 0.78,
+    min_results: int = 3,
+) -> bool:
+    """
+    If retrieval can't find a strong match => treat as new scene / edge-case.
+    threshold is empirical; tune per embedder.
+    """
+    if not fused_results or len(fused_results) < min_results:
+        return True
+    best = float(fused_results[0]["fused_score"])
+    return best < threshold

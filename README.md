@@ -21,3 +21,8 @@ Then we retrieve similar scenarios using:
 ### 1) Run Qdrant
 ```bash
 docker compose up -d
+
+### Text search (incident notes)
+```bash
+python scripts/04_text_query.py --q "pedestrian crossing low light" --time_of_day night
+python scripts/04_text_query.py --q "slippery road rain dusk"
