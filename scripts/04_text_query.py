@@ -6,9 +6,12 @@ from av_memory.config import SETTINGS
 from av_memory.search import search_fused, SearchWeights, is_novel_scene
 from av_memory.embeddings import text_embed
 
+SECONDS_PER_DAY = 60 * 60 * 24
+SECONDS_PER_MONTH = SECONDS_PER_DAY * 30
+
 
 def main() -> None:
-    # I expose common filter knobs in CLI so I can quickly test retrieval behavior.
+    # Expose common filter knobs in the CLI for quick retrieval tests.
     ap = argparse.ArgumentParser()
     ap.add_argument("--q", type=str, required=True, help="Query text, e.g. 'pedestrian low light' or 'slippery road rain'")
     ap.add_argument("--topk", type=int, default=10)
@@ -23,11 +26,11 @@ def main() -> None:
 
     client = get_client()
 
-    # I compute a rolling time window because stale incidents are often less relevant.
+    # Compute a rolling time window because stale incidents are often less relevant.
     now = int(time.time())
-    ts_min = now - (60 * 60 * 24 * 30 * args.last_months)
+    ts_min = now - (SECONDS_PER_MONTH * args.last_months)
 
-    # I only embed the query text here; search_fused still handles ranking/filtering.
+    # Embed only query text here; search_fused handles ranking and filtering.
     q_text = text_embed(args.q)
 
     results = search_fused(
@@ -51,7 +54,7 @@ def main() -> None:
             f"label={p.get('label')} weather={p.get('weather')} time={p.get('time_of_day')} road={p.get('road_type')}"
         )
 
-    # I run a simple novelty check to decide whether this feels like known memory or not.
+    # Run a simple novelty check to classify known memory vs new edge case.
     novel = is_novel_scene(results, threshold=0.72)
     print("\n🚦 Decision:")
     print("   NEW SCENE / EDGE-CASE (trigger mapping)" if novel else "   KNOWN SCENE (reuse memory)")
@@ -61,3 +64,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

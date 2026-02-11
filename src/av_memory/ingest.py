@@ -35,14 +35,14 @@ class Scenario:
     label: str
     notes: str
 
-    # I keep raw modality payloads here so I can derive vectors at ingest time.
+    # Store raw modality payloads so vectors can be derived at ingest time.
     image: Image.Image
     lidar_points: np.ndarray
     radar_signal: np.ndarray
 
 
 def _bucket_location(lat: float, lon: float, step: float = 0.01) -> str:
-    # I keep geobucketing coarse on purpose because I only need
+    # Keep geobucketing intentionally coarse because this pipeline only needs
     # location-level filtering here, not precise geo-search.
     bl = math.floor(lat / step) * step
     bo = math.floor(lon / step) * step
@@ -51,8 +51,8 @@ def _bucket_location(lat: float, lon: float, step: float = 0.01) -> str:
 
 def _make_synthetic_frame(label: str, time_of_day: str, weather: str, seed: int) -> Image.Image:
     """
-    I generate a simple synthetic camera frame with rough visual cues.
-    I do not aim for realism here; I only need consistent patterns that
+    Generate a simple synthetic camera frame with rough visual cues.
+    Realism is not the goal; only consistent patterns that
     the lightweight embedder can learn and retrieve.
     """
     rng = random.Random(seed)
@@ -67,32 +67,32 @@ def _make_synthetic_frame(label: str, time_of_day: str, weather: str, seed: int)
     img = Image.new("RGB", (w, h), bg)
     dr = ImageDraw.Draw(img)
 
-    # I draw a road strip first so every frame has a shared baseline structure.
+    # Draw a road strip first so every frame shares baseline structure.
     dr.rectangle([0, int(h * 0.65), w, h], fill=(70, 70, 70))
 
-    # I add lane markers so the frame has some repeated geometry.
+    # Add lane markers so the frame has repeated geometry.
     for x in range(0, w, 40):
         dr.rectangle([x, int(h * 0.8), x + 20, int(h * 0.82)], fill=(230, 230, 60))
 
-    # I overlay event-specific shapes to create class-dependent signals.
+    # Overlay event-specific shapes to create class-dependent signals.
     if "pedestrian" in label:
         x = rng.randint(40, 200)
-        dr.ellipse([x, 120, x + 25, 145], fill=(250, 220, 200))  # I use a tiny blob as a head proxy.
-        dr.rectangle([x + 10, 145, x + 15, 185], fill=(250, 220, 200))  # I keep body shape minimal.
+        dr.ellipse([x, 120, x + 25, 145], fill=(250, 220, 200))  # Tiny blob acts as a head proxy.
+        dr.rectangle([x + 10, 145, x + 15, 185], fill=(250, 220, 200))  # Minimal body shape.
 
     if "near_miss" in label:
-        # I use a bright red blob to represent sudden-risk context.
+        # Bright red blob represents sudden-risk context.
         dr.ellipse([170, 40, 240, 110], fill=(220, 40, 40))
 
     if "slippery" in label:
-        # I paint a blue puddle-like region for slippery-road scenes.
+        # Blue puddle-like region marks slippery-road scenes.
         dr.ellipse([60, 185, 160, 235], fill=(60, 120, 220))
 
     if time_of_day == "night":
-        # I add a simple headlight glow for nighttime bias.
+        # Add a simple headlight glow for nighttime bias.
         dr.ellipse([10, 160, 90, 240], fill=(240, 240, 180))
 
-    # I sprinkle rain streaks so weather changes are not only metadata labels.
+    # Add rain streaks so weather differences are visible beyond metadata.
     if weather == "rain":
         for _ in range(25):
             x = rng.randint(0, w)
@@ -104,14 +104,14 @@ def _make_synthetic_frame(label: str, time_of_day: str, weather: str, seed: int)
 
 def _make_synthetic_lidar(label: str, seed: int) -> np.ndarray:
     rng = np.random.default_rng(seed)
-    # I start from a noisy road-plane cloud to represent the common background.
+    # Start from a noisy road-plane cloud to represent common background.
     n = 800
     x = rng.normal(0, 10, size=n)
     y = rng.normal(0, 2, size=n)
-    z = rng.normal(0, 0.2, size=n)  # I keep z near 0 so most points sit on ground plane.
+    z = rng.normal(0, 0.2, size=n)  # Keep z near 0 so most points sit on the ground plane.
     pts = np.stack([x, y, z], axis=1)
 
-    # I then inject event-specific point clusters so each class gets distinct geometry.
+    # Inject event-specific clusters so each class has distinct geometry.
     if "pedestrian" in label:
         c = rng.normal([5, 0, 1.2], [0.4, 0.4, 0.3], size=(180, 3))
         pts = np.concatenate([pts, c], axis=0)
@@ -121,7 +121,7 @@ def _make_synthetic_lidar(label: str, seed: int) -> np.ndarray:
         pts = np.concatenate([pts, c], axis=0)
 
     if "slippery" in label:
-        # I mimic a flatter reflective patch with tighter z spread.
+        # Mimic a flatter reflective patch with tighter z spread.
         c = rng.normal([0, 2, 0.05], [3.0, 0.6, 0.05], size=(200, 3))
         pts = np.concatenate([pts, c], axis=0)
 
@@ -133,7 +133,7 @@ def _make_synthetic_radar(label: str, seed: int) -> np.ndarray:
     t = np.linspace(0, 1.0, 512, dtype=np.float32)
     base = 0.05 * rng.normal(size=t.shape).astype(np.float32)
 
-    # I add class-specific frequency components so radar embeddings separate better.
+    # Add class-specific frequency components so radar embeddings separate better.
     s = base
     if "pedestrian" in label:
         s = s + 0.3 * np.sin(2 * np.pi * 18 * t).astype(np.float32)
@@ -159,7 +159,7 @@ def _build_notes(edge_type: str, weather: str, time_of_day: str, road_type: str)
 def make_scenario(i: int, now_ts: int, seed: int) -> Scenario:
     rng = random.Random(seed + i)
 
-    # I sample around one city center so location filters remain meaningful.
+    # Sample around one city center so location filters remain meaningful.
     lat = 12.9716 + rng.uniform(-0.08, 0.08)
     lon = 77.5946 + rng.uniform(-0.08, 0.08)
     location_bucket = _bucket_location(lat, lon)
@@ -168,7 +168,7 @@ def make_scenario(i: int, now_ts: int, seed: int) -> Scenario:
     time_of_day = rng.choice(TIMES)
     road_type = rng.choice(ROAD_TYPES)
 
-    # I keep normal driving more frequent, but I still sample enough edge-cases.
+    # Keep normal driving more frequent while still sampling enough edge cases.
     edge_types = ["pedestrian_low_light", "slippery_road", "near_miss_cut_in", "normal_drive"]
     et = rng.choices(edge_types, weights=[0.25, 0.20, 0.20, 0.35], k=1)[0]
 
@@ -177,7 +177,7 @@ def make_scenario(i: int, now_ts: int, seed: int) -> Scenario:
     label = et
     notes = _build_notes(et, weather, time_of_day, road_type)
 
-    # I spread timestamps across ~14 months so time-window retrieval is testable.
+    # Spread timestamps across ~14 months so time-window retrieval is testable.
     ts = now_ts - rng.randint(0, SECONDS_PER_MONTH * LOOKBACK_MONTHS)
 
     img = _make_synthetic_frame(label, time_of_day, weather, seed=seed + i * 7)
@@ -203,8 +203,8 @@ def make_scenario(i: int, now_ts: int, seed: int) -> Scenario:
 
 
 def scenario_to_point(s: Scenario) -> qm.PointStruct:
-    # I build one vector per modality and store everything as named vectors.
-    # I rely on this so I can query each modality independently and fuse later.
+    # Build one vector per modality and store as named vectors.
+    # This enables independent modality queries and downstream score fusion.
     v_vision = vision_embed(s.image)
     v_lidar = lidar_embed(s.lidar_points)
     v_radar = radar_embed(s.radar_signal)
@@ -251,7 +251,7 @@ def ingest_scenarios(
     name = collection_name or SETTINGS.collection
     now_ts = int(time.time())
 
-    # I buffer points and upsert in batches because single-point writes are slower.
+    # Buffer points and upsert in batches; single-point writes are slower.
     buf: list[qm.PointStruct] = []
     for i in range(count):
         s = make_scenario(i=i, now_ts=now_ts, seed=seed)
@@ -263,3 +263,4 @@ def ingest_scenarios(
 
     if buf:
         client.upsert(collection_name=name, points=buf)
+

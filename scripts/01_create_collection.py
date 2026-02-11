@@ -3,14 +3,15 @@ from av_memory.config import SETTINGS
 
 
 def main() -> None:
-    # I recreate the collection when I want a clean demo state.
-    # I do this to avoid schema drift while I keep iterating.
+    # Recreate the collection to keep demo runs deterministic.
+    # This avoids schema drift during rapid iteration.
     client = get_client()
     recreate_collection(client, SETTINGS.collection)
-    # I add payload indexes right away so filtered search is fast from the start.
+    # Create payload indexes immediately to keep filtered queries fast.
     ensure_payload_indexes(client, SETTINGS.collection)
     print(f"✅ Collection ready: {SETTINGS.collection}")
 
 
 if __name__ == "__main__":
     main()
+
