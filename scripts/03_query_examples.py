@@ -5,14 +5,16 @@ from av_memory.schema import get_client
 from av_memory.config import SETTINGS
 from av_memory.search import search_fused, SearchWeights
 
-# I run a query-by-example flow here: pick one stored point and reuse its vectors as the query.
-# I like this because it mirrors replay/retrieval workflows in practical AV debugging.
+SECONDS_PER_DAY = 60 * 60 * 24
+
+# Query-by-example flow: reuse one stored point's vectors as the query.
+# This mirrors replay-style retrieval used in AV debugging workflows.
 
 
 def main() -> None:
     client = get_client()
 
-    # I sample from existing point IDs instead of assuming a fixed ingest size.
+    # Sample existing IDs instead of assuming a fixed ingest size.
     sample = client.scroll(
         collection_name=SETTINGS.collection,
         limit=256,
@@ -35,7 +37,7 @@ def main() -> None:
         raise RuntimeError("Could not retrieve example point. Did you ingest data?")
 
     base = pt[0]
-    qvecs = base.vector  # I pass all named vectors forward for fused retrieval.
+    qvecs = base.vector  # Pass all named vectors forward for fused retrieval.
     payload = base.payload or {}
 
     print("🔎 Query-by-example scenario:")
@@ -45,9 +47,9 @@ def main() -> None:
     print(f"   notes: {payload.get('notes')}")
     print("")
 
-    # I keep an explicit time window to simulate "recent memory" retrieval.
+    # Apply an explicit time window to simulate "recent memory" retrieval.
     now = int(time.time())
-    last_12_months = 60 * 60 * 24 * 365
+    last_12_months = SECONDS_PER_DAY * 365
 
     results = search_fused(
         client=client,
@@ -55,7 +57,7 @@ def main() -> None:
         weights=SearchWeights(vision=0.45, lidar=0.30, radar=0.15, text=0.10),
         limit_per_modality=40,
         top_k=12,
-        # I keep time_of_day fixed and limit to recent data for a realistic retrieval slice.
+        # Keep time_of_day fixed and limit to recent data for a realistic retrieval slice.
         time_of_day=payload.get("time_of_day"),
         ts_min=now - last_12_months,
         ts_max=now,
@@ -76,3 +78,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
