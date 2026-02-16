@@ -1,45 +1,48 @@
-import numpy as np
-from PIL import Image, ImageFilter
+import os
+from functools import lru_cache
+
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+
+import torch
+import torch.nn.functional as F
+from PIL import Image
+from transformers import CLIPImageProcessor, CLIPModel
 
 from ..config import SETTINGS
 
 
-def _l2_normalize(v: np.ndarray) -> np.ndarray:
-    n = float(np.linalg.norm(v) + 1e-12)
-    return (v / n).astype(np.float32)
+DEFAULT_CLIP_MODEL = "openai/clip-vit-base-patch32"
+
+
+@lru_cache(maxsize=1)
+def _load_clip() -> tuple[CLIPImageProcessor, CLIPModel, torch.device]:
+    model_id = os.getenv("AV_VISION_MODEL_ID", DEFAULT_CLIP_MODEL)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    processor = CLIPImageProcessor.from_pretrained(model_id)
+    model = CLIPModel.from_pretrained(model_id)
+    model.eval()
+    model.to(device)
+    return processor, model, device
 
 
 def vision_embed(img: Image.Image) -> list[float]:
-    """
-    Use a lightweight image representation so this project can run on
-    any laptop without downloading heavy vision backbones.
-    If later moved to CLIP (or any stronger encoder), the Qdrant integration
-    can stay the same as long as vector size handling remains consistent.
-    """
-    img = img.convert("RGB").resize((128, 128))
+    processor, model, device = _load_clip()
+    inputs = processor(images=img.convert("RGB"), return_tensors="pt")
+    pixel_values = inputs["pixel_values"].to(device)
 
-    arr = np.asarray(img, dtype=np.float32) / 255.0
+    with torch.inference_mode():
+        outputs = model.get_image_features(pixel_values=pixel_values)
+        features = outputs.pooler_output if hasattr(outputs, "pooler_output") else outputs
+        features = F.normalize(features, p=2, dim=-1)
 
-    # Start with per-channel color histograms because they are cheap and stable.
-    bins = 16
-    feats = []
-    for ch in range(3):
-        hist, _ = np.histogram(arr[:, :, ch], bins=bins, range=(0.0, 1.0), density=True)
-        feats.append(hist.astype(np.float32))
-
-    # Add a simple edge histogram to capture texture and structure signal.
-    edges = img.filter(ImageFilter.FIND_EDGES)
-    e = np.asarray(edges, dtype=np.float32) / 255.0
-    edge_hist, _ = np.histogram(e.mean(axis=2), bins=16, range=(0.0, 1.0), density=True)
-    feats.append(edge_hist.astype(np.float32))
-
-    v = np.concatenate(feats, axis=0)
-
-    # Force output vector size to the configured schema dimension.
-    if v.shape[0] < SETTINGS.vision_dim:
-        v = np.pad(v, (0, SETTINGS.vision_dim - v.shape[0]), mode="constant")
-    else:
-        v = v[: SETTINGS.vision_dim]
-
-    return _l2_normalize(v).tolist()
+    v = features.squeeze(0).detach().cpu().to(dtype=torch.float32).numpy()
+    if v.shape[0] != SETTINGS.vision_dim:
+        raise ValueError(
+            f"CLIP image embedding dim={v.shape[0]} does not match SETTINGS.vision_dim={SETTINGS.vision_dim}. "
+            "Update the configured dimension and recreate the collection."
+        )
+    return v.tolist()
 

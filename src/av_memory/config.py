@@ -9,10 +9,15 @@ class Settings:
 
     # Vector dimensions are schema contracts.
     # After collection creation, change these only when recreating the collection.
-    vision_dim: int = 256
-    lidar_dim: int = 128
-    radar_dim: int = 128
-    text_dim: int = 256
+    # Defaults correspond to:
+    # - vision: openai/clip-vit-base-patch32 (512)
+    # - lidar: PointNet backbone global feature (1024)
+    # - radar: VyDat radar model penultimate feature (64)
+    # - text: sentence-transformers/all-MiniLM-L6-v2 (384)
+    vision_dim: int = 512
+    lidar_dim: int = 1024
+    radar_dim: int = 64
+    text_dim: int = 384
 
 
 # Shared settings instance keeps scripts and library code aligned.

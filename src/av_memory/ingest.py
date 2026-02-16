@@ -145,15 +145,83 @@ def _make_synthetic_radar(label: str, seed: int) -> np.ndarray:
     return s.astype(np.float32)
 
 
-def _build_notes(edge_type: str, weather: str, time_of_day: str, road_type: str) -> str:
-    notes = f"{edge_type} | weather={weather} | time={time_of_day} | road={road_type}"
+def _build_notes(
+    edge_type: str,
+    weather: str,
+    time_of_day: str,
+    road_type: str,
+    rng: random.Random,
+) -> str:
+    speed_limits: dict[str, tuple[int, int]] = {
+        "city": (20, 55),
+        "highway": (50, 95),
+        "residential": (15, 45),
+        "intersection": (10, 40),
+    }
+    base_visibility = {
+        "clear": 180.0,
+        "overcast": 140.0,
+        "rain": 90.0,
+        "fog": 55.0,
+        "snow": 70.0,
+    }[weather]
+    tod_factor = {"day": 1.0, "dusk": 0.80, "night": 0.55}[time_of_day]
+
+    vmin, vmax = speed_limits[road_type]
+    ego_speed_kph = rng.randint(vmin, vmax)
+    visibility_m = max(15, int(base_visibility * tod_factor + rng.uniform(-12.0, 12.0)))
+    nearest_object_m = round(rng.uniform(2.5, 35.0), 1)
+    traffic = rng.choice(["light", "moderate", "dense"])
+    maneuver = rng.choice(
+        [
+            "gentle braking",
+            "steady throttle",
+            "lane keep assist active",
+            "manual steering correction",
+            "brief evasive steering",
+        ]
+    )
+
     if "pedestrian" in edge_type:
-        notes += " - pedestrian detected crossing"
-    if "slippery" in edge_type:
-        notes += " - low traction, possible hydroplaning"
-    if "near_miss" in edge_type:
-        notes += " - close call with cut-in vehicle"
-    return notes
+        event_line = rng.choice(
+            [
+                "pedestrian crossing from curb with low illumination",
+                "pedestrian entered lane unexpectedly near parked vehicles",
+                "pedestrian crossing event with delayed visual confirmation",
+            ]
+        )
+    elif "slippery" in edge_type:
+        friction_mu = round(rng.uniform(0.22, 0.58), 2)
+        event_line = rng.choice(
+            [
+                "slippery road patch detected with hydroplaning risk",
+                "wet surface reduced tire grip on lane center",
+                "traction drop observed over reflective puddle area",
+            ]
+        )
+        event_line = f"{event_line}; friction_mu={friction_mu}"
+    elif "near_miss" in edge_type:
+        event_line = rng.choice(
+            [
+                "cut-in vehicle created short time-to-collision",
+                "adjacent vehicle merged aggressively into ego lane",
+                "near miss during rapid lane intrusion from left",
+            ]
+        )
+    else:
+        event_line = rng.choice(
+            [
+                "normal drive with stable lane tracking",
+                "routine cruise with no critical interaction",
+                "steady motion and nominal scene context",
+            ]
+        )
+
+    return (
+        f"{edge_type} | weather={weather} | time={time_of_day} | road={road_type}; "
+        f"traffic={traffic}; speed_kph={ego_speed_kph}; visibility_m={visibility_m}; "
+        f"nearest_object_m={nearest_object_m}; maneuver={maneuver}; {event_line}"
+    )
 
 
 def make_scenario(i: int, now_ts: int, seed: int) -> Scenario:
@@ -175,7 +243,7 @@ def make_scenario(i: int, now_ts: int, seed: int) -> Scenario:
     near_miss = et.startswith("near_miss") or (et == "pedestrian_low_light" and time_of_day == "night")
 
     label = et
-    notes = _build_notes(et, weather, time_of_day, road_type)
+    notes = _build_notes(et, weather, time_of_day, road_type, rng=rng)
 
     # Spread timestamps across ~14 months so time-window retrieval is testable.
     ts = now_ts - rng.randint(0, SECONDS_PER_MONTH * LOOKBACK_MONTHS)
